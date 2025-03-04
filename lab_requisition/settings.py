@@ -86,7 +86,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'lab_requisition_db',
-        'USER': 'admin',
+        'USER': 'postgres',
         'PASSWORD': 'LETMEIN',
         'HOST': 'localhost',
         'PORT': '5432',
