@@ -9,7 +9,7 @@ import logging
 
 # Set up logging for debugging
 logging.basicConfig(
-    filename='C:\Users\Administrator\webapp\django_service.log',
+    filename=r'C:\Users\Administrator\webapp\django_service.log',  # Using a raw string with 'r' prefix
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
