@@ -13,7 +13,7 @@ if %ERRORLEVEL% neq 0 (
 
 echo Setting up environment variables...
 setx DB_NAME "lab_requisition_db"
-setx DB_USER "admin"
+setx DB_USER "postgres"
 setx DB_PASSWORD "LETMEIN"
 setx DB_HOST "localhost"
 setx DB_PORT "5432"
