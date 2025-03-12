@@ -65,7 +65,8 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # CORS settings for frontend
 CORS_ALLOWED_ORIGINS = [
     "https://labkmcmlr.manipal.edu",
-    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost"
 ]
 
 # CSRF settings
