@@ -28,7 +28,11 @@ SECRET_KEY = 'your-secret-key'
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'labkmcmlr.manipal.edu', 
+    'labkmcmlr.manipal.edu',
+    'LABKMCMLR.manipal.edu',
+    'labkmcmlr.manipal.edu:443',
+    'labkmcmlr.manipal.edu:80',
+    'labkmcmlr.manipal.edu:8000',
     'localhost', 
     '127.0.0.1', 
     'api.localhost'
