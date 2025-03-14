@@ -45,11 +45,12 @@ CACHES = {
 
 # Static files configuration
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATIC_URL = '/static/'
+STATIC_URL = '/app/static/'
+FORCE_SCRIPT_NAME = '/app'
 
 # Media files configuration
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-MEDIA_URL = '/media/'
+MEDIA_URL = '/app/media/'
 
 # Security settings - ensure secure deployment
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -156,3 +157,5 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5 MB
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 86400  # 1 day in seconds
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_COOKIE_PATH = '/app'
+CSRF_COOKIE_PATH = '/app'
