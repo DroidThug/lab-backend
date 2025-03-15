@@ -41,8 +41,13 @@ class LabOrderViewSet(viewsets.ModelViewSet):
         unit = request.query_params.get('unit', '')
         created_by = request.query_params.get('created_by', '')
         order_by = request.query_params.get('order_by', '-created_at')
+        order_id = request.query_params.get('order_id', '')
 
         queryset = self.get_queryset()
+        
+        # Filter by order_id if provided
+        if order_id:
+            queryset = queryset.filter(order_id__icontains=order_id)
         
         # Optimize query by combining OR conditions
         name_ip_filters = Q()
