@@ -9,6 +9,7 @@ class LabOrderSerializer(serializers.ModelSerializer):
     username = serializers.CharField()
     role = serializers.CharField()
     lab_note = serializers.CharField(required=False, allow_blank=True)
+    clinical_history = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = LabOrder
