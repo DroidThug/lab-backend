@@ -66,9 +66,11 @@ class LabOrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         patient_data = validated_data.pop('patient')
         tests = validated_data.pop('tests', [])
+        new_comment = validated_data.pop('new_comment', None)
+        
+        # Extract these values to use them later, but don't pass them twice
         username = validated_data.get('username')
         role = validated_data.get('role')
-        new_comment = validated_data.pop('new_comment', None)
         
         # Create the order first without the tests
         lab_order = LabOrder.objects.create(
@@ -80,9 +82,7 @@ class LabOrderSerializer(serializers.ModelSerializer):
             department=patient_data['department'],
             unit=patient_data['unit'],
             ipop=patient_data.get('ipop', 'ip'),  # Default to 'ip' if not provided
-            username=username,
-            role=role,
-            **validated_data
+            **validated_data  # username and role are now included only once
         )
         
         # Set the tests after the order is created and has an ID
