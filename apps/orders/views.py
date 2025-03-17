@@ -5,8 +5,8 @@ from rest_framework import serializers
 from django.db.models import Q, Count, F
 from django.db.models.functions import ExtractYear
 from django.db import transaction
-from .models import LabOrder, LabTest
-from .serializers import LabOrderSerializer, LabTestSerializer
+from .models import LabOrder, LabTest, TestStatus
+from .serializers import LabOrderSerializer, LabTestSerializer, TestStatusSerializer
 import logging
 from rest_framework.pagination import PageNumberPagination
 
@@ -25,7 +25,7 @@ class LabOrderViewSet(viewsets.ModelViewSet):
     pagination_class = LabOrderPagination
 
     def get_queryset(self):
-        return LabOrder.objects.prefetch_related('tests').all()
+        return LabOrder.objects.prefetch_related('tests', 'teststatus').all()
 
     @action(detail=False, methods=['get'])
     def search(self, request):
@@ -140,6 +140,61 @@ class LabOrderViewSet(viewsets.ModelViewSet):
         
         return Response(stats)
 
+    @action(detail=True, methods=['post'])
+    def update_test_status(self, request, order_id=None):
+        """Update status for specific tests within an order"""
+        try:
+            order = self.get_object()
+        except LabOrder.DoesNotExist:
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get parameters
+        all_tests = request.data.get('all_tests_status', False)
+        new_status = request.data.get('status')
+        test_ids = request.data.get('test_ids', [])
+        
+        if not new_status:
+            return Response({'error': 'Status is required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if new_status not in dict(TestStatus._meta.get_field('status').choices).keys():
+            return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        with transaction.atomic():
+            # Update the order's overall status
+            order.status = new_status
+            order.all_tests_status = all_tests
+            order.save()
+            
+            # If applying to all tests
+            if all_tests:
+                tests = order.tests.all()
+                for test in tests:
+                    TestStatus.objects.update_or_create(
+                        order=order,
+                        test=test,
+                        defaults={'status': new_status}
+                    )
+            # If applying to specific tests
+            elif test_ids:
+                tests = LabTest.objects.filter(id__in=test_ids)
+                for test in tests:
+                    TestStatus.objects.update_or_create(
+                        order=order,
+                        test=test,
+                        defaults={'status': new_status}
+                    )
+                    
+            # Return updated test statuses
+            test_statuses = TestStatus.objects.filter(order=order)
+            serializer = TestStatusSerializer(test_statuses, many=True)
+            
+            return Response({
+                'message': 'Test statuses updated successfully',
+                'order_status': order.status,
+                'all_tests_status': order.all_tests_status,
+                'test_statuses': serializer.data
+            }, status=status.HTTP_200_OK)
+
 @api_view(['POST'])
 @transaction.atomic
 def submit_order(request):
@@ -163,16 +218,33 @@ def update_order_status(request, order_id):
         order = LabOrder.objects.get(order_id=order_id)
     except LabOrder.DoesNotExist:
         return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    status = request.data.get('status')
+    
+    new_status = request.data.get('status')
     lab_note = request.data.get('lab_note', '')
-    if status not in ['pending', "accepted", 'rejected', 'flagged']:
+    all_tests_status = request.data.get('all_tests_status', True)
+    
+    if new_status not in ['pending', 'accepted', 'rejected', 'flagged', 'billing', 'rejected_from_lab']:
         return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
-
-    order.status = status
+    
+    order.status = new_status
     order.lab_note = lab_note
+    order.all_tests_status = all_tests_status
     order.save()
-    return Response({'status': 'Order status updated', 'lab_note': order.lab_note}, status=status.HTTP_200_OK)
+    
+    # If all tests status is true, update all test statuses
+    if all_tests_status and new_status != 'pending':
+        for test in order.tests.all():
+            TestStatus.objects.update_or_create(
+                order=order,
+                test=test,
+                defaults={'status': new_status}
+            )
+    
+    return Response({
+        'status': 'Order status updated', 
+        'lab_note': order.lab_note,
+        'all_tests_status': order.all_tests_status
+    }, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 def get_orders(request):

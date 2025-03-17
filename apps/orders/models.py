@@ -13,8 +13,17 @@ class LabOrder(models.Model):
     department = models.CharField(max_length=255, default='GWH', db_index=True)
     unit = models.CharField(max_length=255, default='OTHER', db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-    status = models.CharField(max_length=50, choices=[("pending", "Pending"), ("accepted", "Accepted"), ("rejected", "Rejected"), ("flagged", "Flagged")], default='pending', db_index=True)
+    status = models.CharField(max_length=50, choices=[
+        ("pending", "Pending"), 
+        ("accepted", "Accepted"), 
+        ("rejected", "Rejected"), 
+        ("flagged", "Flagged"),
+        ("billing", "Billing"),
+        ("rejected_from_lab", "Rejected From Lab")
+    ], default='pending', db_index=True)
     tests = models.ManyToManyField('LabTest', related_name='orders')
+    teststatus = models.ManyToManyField('LabTest', through='TestStatus', related_name='status_orders')
+    all_tests_status = models.BooleanField(default=True, help_text="Indicates if the status applies to all tests")
     clinical_history = models.TextField(default='')
     username = models.CharField(max_length=255, default='', db_index=True)
     role = models.CharField(max_length=255, default='')
@@ -67,6 +76,27 @@ class LabOrder(models.Model):
 
     def __str__(self):
         return f"Order {self.order_id} for {self.patient_name}"
+
+class TestStatus(models.Model):
+    """Intermediate model for tracking status of individual tests within an order"""
+    order = models.ForeignKey('LabOrder', on_delete=models.CASCADE)
+    test = models.ForeignKey('LabTest', on_delete=models.CASCADE)
+    status = models.CharField(max_length=50, choices=[
+        ("pending", "Pending"), 
+        ("accepted", "Accepted"), 
+        ("rejected", "Rejected"), 
+        ("flagged", "Flagged"),
+        ("billing", "Billing"),
+        ("rejected_from_lab", "Rejected From Lab")
+    ], default='pending')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('order', 'test')
+        verbose_name_plural = 'Test Statuses'
+
+    def __str__(self):
+        return f"{self.test.name} - {self.status}"
 
 class LabTest(models.Model):
     name = models.CharField(max_length=255)
