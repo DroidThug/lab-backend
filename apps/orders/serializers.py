@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import LabOrder, LabTest, Privilege, TestStatus
+from .models import LabOrder, LabTest, Privilege, TestStatus, LabComment
 from django.db import transaction
 
 class TestStatusSerializer(serializers.ModelSerializer):
@@ -10,21 +10,52 @@ class TestStatusSerializer(serializers.ModelSerializer):
         model = TestStatus
         fields = ['test_id', 'test_name', 'status', 'updated_at']
 
+class LabCommentSerializer(serializers.ModelSerializer):
+    order_id = serializers.CharField(write_only=True, required=False)
+    
+    class Meta:
+        model = LabComment
+        fields = ['id', 'comment', 'username', 'role', 'created_at', 'order', 'order_id']
+        read_only_fields = ['created_at']
+        extra_kwargs = {'order': {'write_only': True}}
+    
+    def validate(self, data):
+        # Check if either order or order_id is provided
+        if 'order' not in data and 'order_id' not in data:
+            raise serializers.ValidationError("Either order or order_id must be provided")
+        
+        # Convert order_id to order if needed
+        if 'order_id' in data and 'order' not in data:
+            try:
+                order = LabOrder.objects.get(order_id=data['order_id'])
+                data['order'] = order
+            except LabOrder.DoesNotExist:
+                raise serializers.ValidationError(f"Lab order with order_id {data['order_id']} does not exist")
+            
+        # Remove order_id from data as it's not a model field
+        if 'order_id' in data:
+            data.pop('order_id')
+            
+        return data
+
 class LabOrderSerializer(serializers.ModelSerializer):
     tests = serializers.PrimaryKeyRelatedField(queryset=LabTest.objects.all(), many=True)
     patient = serializers.JSONField(write_only=True)
     patient_details = serializers.SerializerMethodField(read_only=True)
     username = serializers.CharField()
     role = serializers.CharField()
-    lab_note = serializers.CharField(required=False, allow_blank=True)
+    # Removed lab_note field as it's replaced by comments
+    comments = LabCommentSerializer(many=True, read_only=True)
+    new_comment = serializers.CharField(write_only=True, required=False, allow_blank=True)
     clinical_history = serializers.CharField(required=False, allow_blank=True)
     all_tests_status = serializers.BooleanField(required=False, default=True)
-    test_statuses = TestStatusSerializer(source='teststatus', many=True, required=False, read_only=True)
+    test_statuses = TestStatusSerializer(source='test_statuses', many=True, required=False, read_only=True)
     
     class Meta:
         model = LabOrder
         fields = ['order_id', 'patient', 'patient_details', 'tests', 'status', 'created_at', 
-                  'username', 'role', 'clinical_history', 'lab_note', 'all_tests_status', 'test_statuses']
+                  'username', 'role', 'clinical_history', 'comments', 'new_comment', 
+                  'all_tests_status', 'test_statuses', 'ipop']
     
     def validate(self, data):
         if self.instance is None and ('tests' not in data or not data['tests']):
@@ -35,18 +66,20 @@ class LabOrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         patient_data = validated_data.pop('patient')
         tests = validated_data.pop('tests', [])
-        username = validated_data.pop('username')
-        role = validated_data.pop('role')
+        username = validated_data.get('username')
+        role = validated_data.get('role')
+        new_comment = validated_data.pop('new_comment', None)
         
         # Create the order first without the tests
         lab_order = LabOrder.objects.create(
             patient_name=patient_data['name'],
             ip_number=patient_data['ip_number'],
             age=patient_data['age'],
-            ageunit=patient_data.get('ageunit'),
-            sex=patient_data.get('sex'),
+            ageunit=patient_data.get('ageunit', 'y'),
+            sex=patient_data.get('sex', 'M'),
             department=patient_data['department'],
             unit=patient_data['unit'],
+            ipop=patient_data.get('ipop', 'ip'),  # Default to 'ip' if not provided
             username=username,
             role=role,
             **validated_data
@@ -64,6 +97,15 @@ class LabOrderSerializer(serializers.ModelSerializer):
                     status=lab_order.status
                 )
         
+        # Add a comment if provided
+        if new_comment:
+            LabComment.objects.create(
+                order=lab_order,
+                comment=new_comment,
+                username=username,
+                role=role
+            )
+        
         return lab_order
     
     @transaction.atomic
@@ -71,6 +113,9 @@ class LabOrderSerializer(serializers.ModelSerializer):
         tests = validated_data.pop('tests', None)
         status = validated_data.get('status')
         all_tests_status = validated_data.get('all_tests_status', True)
+        new_comment = validated_data.pop('new_comment', None)
+        username = validated_data.get('username')
+        role = validated_data.get('role')
         
         if tests is not None:
             instance.tests.set(tests)
@@ -90,6 +135,15 @@ class LabOrderSerializer(serializers.ModelSerializer):
                         defaults={'status': status}
                     )
         
+        # Add a comment if provided
+        if new_comment:
+            LabComment.objects.create(
+                order=instance,
+                comment=new_comment,
+                username=username or instance.username,
+                role=role or instance.role
+            )
+        
         return instance
     
     def get_patient_details(self, obj):
@@ -101,6 +155,7 @@ class LabOrderSerializer(serializers.ModelSerializer):
             'sex': obj.sex,
             'department': obj.department,
             'unit': obj.unit,
+            'ipop': obj.ipop,
         }
 
 class LabTestSerializer(serializers.ModelSerializer):

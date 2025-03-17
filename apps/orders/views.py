@@ -1,12 +1,13 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import api_view, action
 from rest_framework.response import Response
 from rest_framework import serializers
 from django.db.models import Q, Count, F
 from django.db.models.functions import ExtractYear
 from django.db import transaction
-from .models import LabOrder, LabTest, TestStatus
-from .serializers import LabOrderSerializer, LabTestSerializer, TestStatusSerializer
+from django.shortcuts import get_object_or_404
+from .models import LabOrder, LabTest, TestStatus, LabComment
+from .serializers import LabOrderSerializer, LabTestSerializer, TestStatusSerializer, LabCommentSerializer
 import logging
 from rest_framework.pagination import PageNumberPagination
 
@@ -42,6 +43,7 @@ class LabOrderViewSet(viewsets.ModelViewSet):
         created_by = request.query_params.get('created_by', '')
         order_by = request.query_params.get('order_by', '-created_at')
         order_id = request.query_params.get('order_id', '')
+        ipop = request.query_params.get('ipop', '')
 
         queryset = self.get_queryset()
         
@@ -77,6 +79,8 @@ class LabOrderViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(unit__iexact=unit)
         if created_by:
             queryset = queryset.filter(username__icontains=created_by)
+        if ipop:
+            queryset = queryset.filter(ipop__iexact=ipop)
 
         # Apply distinct and ordering after all filters
         queryset = queryset.distinct()
@@ -134,6 +138,13 @@ class LabOrderViewSet(viewsets.ModelViewSet):
         
         stats['tests_ordered'] = list(
             queryset.values('tests__name')
+                   .annotate(count=Count('id'))
+                   .order_by('-count')
+        )
+        
+        # Add patient type statistics (inpatient vs outpatient)
+        stats['patient_types'] = list(
+            queryset.values('ipop')
                    .annotate(count=Count('id'))
                    .order_by('-count')
         )
@@ -264,3 +275,45 @@ class LabTestViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(privilege__in=privileges)  # Fixed missing closing parenthesis
         
         return queryset.only('id', 'name', 'privilege', 'vac_col')
+
+class LabCommentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing lab comments
+    """
+    queryset = LabComment.objects.all()
+    serializer_class = LabCommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Filter comments by order_id if provided in the URL parameters"""
+        queryset = super().get_queryset()
+        order_id = self.request.query_params.get('order_id', None)
+        if order_id:
+            queryset = queryset.filter(order__order_id=order_id)
+        return queryset
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new comment, getting the lab order by order_id"""
+        order_id = request.data.get('order_id')
+        if not order_id:
+            return Response(
+                {"error": "order_id is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        order = get_object_or_404(LabOrder, order_id=order_id)
+        
+        # Create a mutable copy of request.data
+        data = request.data.copy()
+        data['order'] = order.id
+        
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, 
+            status=status.HTTP_201_CREATED, 
+            headers=headers
+        )

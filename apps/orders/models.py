@@ -12,6 +12,7 @@ class LabOrder(models.Model):
     sex = models.CharField(max_length=1, choices=[('M', 'Male'), ('F', 'Female')], default='M', db_index=True)
     department = models.CharField(max_length=255, default='GWH', db_index=True)
     unit = models.CharField(max_length=255, default='OTHER', db_index=True)
+    ipop = models.CharField(max_length=2, choices=[('ip', 'Inpatient'), ('op', 'Outpatient')], default='ip', db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     status = models.CharField(max_length=50, choices=[
         ("pending", "Pending"), 
@@ -27,7 +28,7 @@ class LabOrder(models.Model):
     clinical_history = models.TextField(default='')
     username = models.CharField(max_length=255, default='', db_index=True)
     role = models.CharField(max_length=255, default='')
-    lab_note = models.TextField(blank=True, default='')
+    lab_note = models.TextField(blank=True, default='')  # Keep for backward compatibility, will remove in next migration
 
     def save(self, *args, **kwargs):
         if not self.order_id:
@@ -77,9 +78,25 @@ class LabOrder(models.Model):
     def __str__(self):
         return f"Order {self.order_id} for {self.patient_name}"
 
+class LabComment(models.Model):
+    """Model for tracking comments/notes on lab orders with user information and timestamps"""
+    order = models.ForeignKey('LabOrder', on_delete=models.CASCADE, related_name='comments')
+    comment = models.TextField()
+    username = models.CharField(max_length=255)
+    role = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Lab Comment'
+        verbose_name_plural = 'Lab Comments'
+    
+    def __str__(self):
+        return f"Comment by {self.username} on {self.order.order_id}"
+
 class TestStatus(models.Model):
     """Intermediate model for tracking status of individual tests within an order"""
-    order = models.ForeignKey('LabOrder', on_delete=models.CASCADE)
+    order = models.ForeignKey('LabOrder', on_delete=models.CASCADE, related_name='test_statuses')
     test = models.ForeignKey('LabTest', on_delete=models.CASCADE)
     status = models.CharField(max_length=50, choices=[
         ("pending", "Pending"), 
