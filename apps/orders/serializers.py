@@ -49,13 +49,13 @@ class LabOrderSerializer(serializers.ModelSerializer):
     new_comment = serializers.CharField(write_only=True, required=False, allow_blank=True)
     clinical_history = serializers.CharField(required=False, allow_blank=True)
     all_tests_status = serializers.BooleanField(required=False, default=True)
-    test_statuses = TestStatusSerializer(source='test_statuses', many=True, required=False, read_only=True)
+    test_statuses = TestStatusSerializer(many=True, required=False, read_only=True)
     
     class Meta:
         model = LabOrder
         fields = ['order_id', 'patient', 'patient_details', 'tests', 'status', 'created_at', 
                   'username', 'role', 'clinical_history', 'comments', 'new_comment', 
-                  'all_tests_status', 'test_statuses', 'ipop']
+                  'all_tests_status', 'test_statuses']  # Removed 'ipop' from here
     
     def validate(self, data):
         if self.instance is None and ('tests' not in data or not data['tests']):
