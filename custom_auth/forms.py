@@ -3,11 +3,13 @@ from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from .models import CustomUser
 
 class CustomUserCreationForm(UserCreationForm):
-    class Meta(UserCreationForm.Meta):
+    class Meta:
         model = CustomUser
-        fields = ('username', 'email', 'password1', 'password2', 'role')
+        fields = ('username', 'email', 'first_name', 'last_name', 'role', 'phone_number', 
+                 'designation', 'reg_no', 'department', 'year', 'location', 'dob')
 
 class CustomUserChangeForm(UserChangeForm):
-    class Meta(UserChangeForm.Meta):
+    class Meta:
         model = CustomUser
-        fields = ('username', 'email', 'role', 'is_staff', 'is_active')
+        fields = ('username', 'email', 'first_name', 'last_name', 'role', 'phone_number', 
+                 'designation', 'reg_no', 'department', 'year', 'location', 'dob')
