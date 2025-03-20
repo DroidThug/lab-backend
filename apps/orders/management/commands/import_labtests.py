@@ -11,22 +11,22 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         csv_file = kwargs['csv_file']
-        LabTest.objects.all().delete()  # Purge current entries in LabTest
-        with connection.cursor() as cursor:
-            cursor.execute("ALTER SEQUENCE orders_labtest_id_seq RESTART WITH 1;")
         with open(csv_file, newline='') as file:
             reader = csv.DictReader(file)
-            required_columns = {'name', 'privilege', 'vac_col', 'comp', 'section'}
+            required_columns = {'id', 'name', 'privilege', 'vac_col', 'comp', 'section'}
             if not required_columns.issubset(reader.fieldnames):
                 missing_columns = required_columns - set(reader.fieldnames)
                 self.stderr.write(self.style.ERROR(f'Missing columns in CSV file: {missing_columns}'))
                 return
             for row in reader:
-                LabTest.objects.create(
-                    name=row['name'],
-                    privilege=row['privilege'],
-                    vac_col=row['vac_col'],
-                    section=row['section']
+                lab_test, created = LabTest.objects.update_or_create(
+                    id=row['id'],
+                    defaults={
+                        'name': row['name'],
+                        'privilege': row['privilege'],
+                        'vac_col': row['vac_col'],
+                        'section': row['section']
+                    }
                 )
 
             file.seek(0)
@@ -36,7 +36,7 @@ class Command(BaseCommand):
                 if row['comp']:
                     try:
                         comp_test = LabTest.objects.get(id=row['comp'])
-                        lab_test = LabTest.objects.get(name=row['name'])
+                        lab_test = LabTest.objects.get(id=row['id'])
                         lab_test.comp = comp_test
                         lab_test.save()
                     except LabTest.DoesNotExist:
