@@ -13,19 +13,25 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('csv_file', type=str, help='Path to the CSV file')
+        parser.add_argument('--update-passwords', action='store_true', 
+                            help='Update passwords for existing users instead of skipping them')
 
     def handle(self, *args, **options):
         csv_file_path = options['csv_file']
+        update_passwords = options.get('update_passwords', False)
         
         if not os.path.exists(csv_file_path):
             self.stdout.write(self.style.ERROR(f"File not found: {csv_file_path}"))
             return
             
         self.stdout.write(self.style.SUCCESS(f"Importing users from {csv_file_path}"))
+        if update_passwords:
+            self.stdout.write(self.style.SUCCESS("Will update passwords for existing users"))
         
         # Track statistics
         users_created = 0
         users_skipped = 0
+        users_updated = 0
         errors = []
         users_to_create = []
         
@@ -53,12 +59,6 @@ class Command(BaseCommand):
                             users_skipped += 1
                             continue
                         
-                        # Check if user already exists
-                        if User.objects.filter(username=username).exists():
-                            self.stdout.write(self.style.WARNING(f"User {username} already exists. Skipping."))
-                            users_skipped += 1
-                            continue
-                        
                         # Process name field - split into first and last name
                         name_parts = name.split()
                         if len(name_parts) > 0:
@@ -73,6 +73,20 @@ class Command(BaseCommand):
                             # Use firstname.initialoflastname as password
                             last_initial = last_name[0] if last_name else ''
                             password = f"{first_name.lower()}.{last_initial.lower()}" if last_initial else first_name.lower()
+                        
+                        # Check if user already exists
+                        existing_user = User.objects.filter(username=username).first()
+                        if existing_user:
+                            if update_passwords:
+                                # Update the password for existing user
+                                existing_user.password = make_password(password)
+                                existing_user.save(update_fields=['password'])
+                                users_updated += 1
+                                self.stdout.write(self.style.SUCCESS(f"Updated password for user: {username}"))
+                            else:
+                                self.stdout.write(self.style.WARNING(f"User {username} already exists. Skipping."))
+                                users_skipped += 1
+                            continue
                         
                         # Convert year to integer if possible
                         try:
@@ -125,7 +139,12 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.SUCCESS(f"Created batch of {len(batch)} users"))
             
             # Print summary
-            self.stdout.write(self.style.SUCCESS(f"Import completed. Users created: {users_created}, Users skipped: {users_skipped}, Errors: {len(errors)}"))
+            summary = f"Import completed. Users created: {users_created}, "
+            if update_passwords:
+                summary += f"Users updated: {users_updated}, "
+            summary += f"Users skipped: {users_skipped}, Errors: {len(errors)}"
+            self.stdout.write(self.style.SUCCESS(summary))
+            
             if errors:
                 self.stdout.write(self.style.WARNING("Errors encountered:"))
                 for error in errors:
